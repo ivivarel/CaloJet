@@ -21,6 +21,34 @@ void MyTree::Init()
    
    fChain->Branch("nmuon ",&nmuon ,"nmuon/I");
    fChain->Branch("nneu ",&nneu ,"nneu/I");
+   fChain->Branch("higgsrec_m",&higgsrec_m,"higgsrec_m/D");
+   fChain->Branch("higgsrec_theta",&higgsrec_theta,"higgsrec_theta/D");
+   fChain->Branch("higgsrec_E",&higgsrec_E,"higgsrec_E/D");
+   fChain->Branch("higgsrec_phi",&higgsrec_phi,"higgsrec_phi/D");
+   fChain->Branch("higgsrecem_m",&higgsrecem_m,"higgsrecem_m/D");
+   fChain->Branch("higgsrecem_theta",&higgsrecem_theta,"higgsrecem_theta/D");
+   fChain->Branch("higgsrecem_E",&higgsrecem_E,"higgsrecem_E/D");
+   fChain->Branch("higgsrecem_phi",&higgsrecem_phi,"higgsrecem_phi/D");
+   fChain->Branch("higgsHybErec_m",&higgsHybErec_m,"higgsHybErec_m/D");
+   fChain->Branch("higgsHybErec_theta",&higgsHybErec_theta,"higgsHybErec_theta/D");
+   fChain->Branch("higgsHybErec_E",&higgsHybErec_E,"higgsHybErec_E/D");
+   fChain->Branch("higgsHybErec_phi",&higgsHybErec_phi,"higgsHybErec_phi/D");
+   fChain->Branch("higgsHybDirRec_m",&higgsHybDirRec_m,"higgsHybDirRec_m/D");
+   fChain->Branch("higgsHybDirRec_theta",&higgsHybDirRec_theta,"higgsHybDirRec_theta/D");
+   fChain->Branch("higgsHybDirRec_E",&higgsHybDirRec_E,"higgsHybDirRec_E/D");
+   fChain->Branch("higgsHybDirRec_phi",&higgsHybDirRec_phi,"higgsHybDirRec_phi/D");
+   fChain->Branch("higgstruth_m",&higgstruth_m,"higgstruth_m/D");
+   fChain->Branch("higgstruth_theta",&higgstruth_theta,"higgstruth_theta/D");
+   fChain->Branch("higgstruth_E",&higgstruth_E,"higgstruth_E/D");
+   fChain->Branch("higgstruth_phi",&higgstruth_phi,"higgstruth_phi/D");
+   fChain->Branch("higgsscint_m",&higgsscint_m,"higgsscint_m/D");
+   fChain->Branch("higgsscint_theta",&higgsscint_theta,"higgsscint_theta/D");
+   fChain->Branch("higgsscint_E",&higgsscint_E,"higgsscint_E/D");
+   fChain->Branch("higgsscint_phi",&higgsscint_phi,"higgsscint_phi/D");
+   fChain->Branch("higgscher_m",&higgscher_m,"higgscher_m/D");
+   fChain->Branch("higgscher_theta",&higgscher_theta,"higgscher_theta/D");
+   fChain->Branch("higgscher_E",&higgscher_E,"higgscher_E/D");
+   fChain->Branch("higgscher_phi",&higgscher_phi,"higgscher_phi/D");
    fChain->Branch("mjjr",&mjjr,"mjjr/D");
    fChain->Branch("mjjt",&mjjt,"mjjt/D");
    fChain->Branch("edep",&edep,"edep/D");
@@ -86,6 +114,9 @@ void MyTree::Init()
    fChain->Branch("j2c_phi",&j2c_phi,"j2c_phi/D");
    fChain->Branch("j2c_m",&j2c_m,"j2c_m/D");
    fChain->Branch("j2c_theta",&j2c_theta,"j2c_theta/D");
+   fChain->Branch("closestT_DR_gam1",&closestT_DR_gam1,"closestT_DR_gam1/D");
+   fChain->Branch("closestT_DR_gam2",&closestT_DR_gam2,"closestT_DR_gam2/D");
+
 }
 
 void MyTree::Reset()
@@ -151,4 +182,34 @@ void MyTree::Reset()
    j2c_phi=-5.;
    j2c_m=-1.;
    j2c_theta=-7.;
+
+   higgsrec_m = 0;
+   higgsrec_theta = 0;
+   higgsrec_E = 0;
+   higgsrec_phi = 0;
+   higgsrecem_m = 0;
+   higgsrecem_theta = 0;
+   higgsrecem_E = 0;
+   higgsrecem_phi = 0;
+   higgsHybErec_m = 0;
+   higgsHybErec_theta = 0;
+   higgsHybErec_E = 0;
+   higgsHybErec_phi = 0;
+   higgsHybDirRec_m = 0;
+   higgsHybDirRec_theta = 0;
+   higgsHybDirRec_E = 0;
+   higgsHybDirRec_phi = 0;
+   higgstruth_m = 0;
+   higgstruth_theta = 0;
+   higgstruth_E = 0;
+   higgstruth_phi = 0;
+   higgsscint_m = 0;
+   higgsscint_theta = 0;
+   higgsscint_E = 0;
+   higgsscint_phi = 0;
+   higgscher_m = 0;
+   higgscher_theta = 0;
+   higgscher_E = 0;
+   higgscher_phi = 0;
+
 }

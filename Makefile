@@ -8,23 +8,29 @@ LD            = g++
 LDFLAGS       = -g
 SOFLAGS       = -shared
 
-FASTJET_CONFIG=/home/software/fastjet/bin/fastjet-config
+FASTJET_CONFIG=$(FASTJET__HOME)/bin/fastjet-config
 LIBSFASTJET += $(shell $(FASTJET_CONFIG) --libs --plugins ) -lstdc++
 CXXFLAGS    += $(ROOTCFLAGS)
 CXXFLAGS    += $(shell $(FASTJET_CONFIG) --cxxflags)
 LIBS        = $(ROOTLIBS) -lEG $(LIBSFASTJET)
 GLIBS       = $(ROOTGLIBS)
 
-all: dohist dohistB
+all: dohist dohistB doHgamgam
 
 dohist: dohist.o MyTree.o
 	$(CXX) -o $@ dohist.o MyTree.o $(CXXFLAGS) $(LIBS)
+
+doHgamgam: doHgamgam.o MyTree.o
+	$(CXX) -o $@ doHgamgam.o MyTree.o $(CXXFLAGS) $(LIBS)
 
 dohistB: dohistB.o MyTree.o
 	$(CXX) -o $@ dohistB.o MyTree.o $(CXXFLAGS) $(LIBS)
 
 dohist.o:  dohist.C 
 	$(CXX) -c $(CXXFLAGS) -I.  -o dohist.o dohist.C
+
+doHgamgam.o:  doHgamgam.C 
+	$(CXX) -c $(CXXFLAGS) -I.  -o doHgamgam.o doHgamgam.C
 
 dohistB.o:  dohistB.C 
 	$(CXX) -c $(CXXFLAGS) -I.  -o dohistB.o dohistB.C

@@ -3,14 +3,26 @@
 Athena with SUSYtup. See SUSYtup.h for more information.
 	For version 7.0.0++ using name susy for Ntuple.
 ***********************************************************************/
+// ROOT includes 
+
 #include <TROOT.h> 
 #include "TTree.h" 
 #include "TBranch.h" 
 #include <TFile.h>
-#include "MyTree.h"
+#include "TLorentzVector.h"
+#include "TMath.h"
+
+// fastjet includes 
+
 #include "fastjet/PseudoJet.hh"
 #include "fastjet/ClusterSequence.hh"
-#include "TLorentzVector.h"
+
+// Framework includes
+
+#include "MyTree.h"
+
+// std library includes 
+
 #include <iostream>
 #include <fstream>
 #include <string>
@@ -46,9 +58,12 @@ vector<double> Calib_VectorCherR;
 vector<double> Calib_VectorCherL;	
 
 double GeV=1000.;
-double pi=3.14159265;
+double pi=TMath::Pi();
 double threshold=0.01;
 double etalim=5; //5.0
+
+
+
 //////////////////////////////////////////////////////////////////////
 int main(int argc, char **argv) { 
   vector<double> calibscin(std::vector<double> vectorscin);
