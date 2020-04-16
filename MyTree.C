@@ -114,6 +114,10 @@ void MyTree::Init()
    fChain->Branch("j2c_phi",&j2c_phi,"j2c_phi/D");
    fChain->Branch("j2c_m",&j2c_m,"j2c_m/D");
    fChain->Branch("j2c_theta",&j2c_theta,"j2c_theta/D");
+   fChain->Branch("j1s_eshare",&j1s_eshare,"j1s_eshare/D");
+   fChain->Branch("j2s_eshare",&j2s_eshare,"j2s_eshare/D");
+   fChain->Branch("j1c_eshare",&j1c_eshare,"j1c_eshare/D");
+   fChain->Branch("j2c_eshare",&j2c_eshare,"j2c_eshare/D");
    fChain->Branch("closestT_DR_gam1",&closestT_DR_gam1,"closestT_DR_gam1/D");
    fChain->Branch("closestT_DR_gam2",&closestT_DR_gam2,"closestT_DR_gam2/D");
 

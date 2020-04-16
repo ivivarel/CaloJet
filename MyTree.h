@@ -118,6 +118,10 @@ public :
    Double_t j2c_phi;
    Double_t j2c_m;
    Double_t j2c_theta;
+   Double_t j1s_eshare;
+   Double_t j2s_eshare;
+   Double_t j1c_eshare;
+   Double_t j2c_eshare;
    Double_t closestT_DR_gam1;
    Double_t closestT_DR_gam2;
 //

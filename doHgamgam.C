@@ -8,6 +8,7 @@ Athena with SUSYtup. See SUSYtup.h for more information.
 #include <TROOT.h> 
 #include "TTree.h" 
 #include "TBranch.h" 
+#include "TProfile.h"
 #include <TFile.h>
 #include "TLorentzVector.h"
 #include "TMath.h"
@@ -32,6 +33,7 @@ Athena with SUSYtup. See SUSYtup.h for more information.
 #include <iomanip>
 #include <cmath>
 #include <tuple>
+#include <algorithm>
 
 using namespace std;
 
@@ -48,6 +50,7 @@ vector<fastjet::PseudoJet> jet_cher;
 vector<fastjet::PseudoJet> jet_rec;
 vector<fastjet::PseudoJet> jet_recem; // reco jet taking simply the average of the two signals
 vector<fastjet::PseudoJet> jet_tru;
+vector<fastjet::PseudoJet> jet_truem;
 vector<TLorentzVector> gamvec;
 vector<TLorentzVector> nuvec;
 vector<TLorentzVector> otherparticle;
@@ -66,6 +69,7 @@ double etalim=5; //5.0
 
 //////////////////////////////////////////////////////////////////////
 int main(int argc, char **argv) { 
+  void recalibrate(std::vector<fastjet::PseudoJet> * jet, TProfile * h_cal);
   fastjet::PseudoJet findClosestTower(fastjet::PseudoJet v);  
   std::vector<unsigned int> cutflow(10,0.);  
   vector<double> calibscin(std::vector<double> vectorscin);
@@ -75,6 +79,7 @@ int main(int argc, char **argv) {
   fastjet::PseudoJet matchjet(fastjet::PseudoJet jet_in, vector<fastjet::PseudoJet> testvec);
   fastjet::PseudoJet mergejet(fastjet::PseudoJet jet_scin, fastjet::PseudoJet jet_cher);
   fastjet::PseudoJet mergejetem(fastjet::PseudoJet jet_scin, fastjet::PseudoJet jet_cher, bool doCalib); 
+  double energyShare(fastjet::PseudoJet jet);
   cout << "-------------------------------------------" << std::endl;
   cout << " N arguments " << argc << std::endl;
   if(argc<2){
@@ -84,6 +89,20 @@ int main(int argc, char **argv) {
 
 
   bool doRecal = true;
+
+  TProfile * h_calib_scint = 0;
+  TProfile * h_calib_cher = 0;
+  TFile * fCal = 0;
+  if (doRecal){
+    fCal = TFile::Open("calfile_DR_hgamgam.root");
+    if (!fCal){
+      std::cerr << "Cannot find calibration file" << std::endl;
+    } else {
+      h_calib_scint = (TProfile *) fCal->Get("h_calib_scint1");
+      h_calib_cher =  (TProfile *) fCal->Get("h_calib_cher1");
+    }
+  }
+    
   
   // Parsing of the output file
   
@@ -133,7 +152,7 @@ int main(int argc, char **argv) {
   
   cout << " Number of events " << nentries << endl;
   for (Int_t jentry=0; jentry<nentries;jentry++) {
-    if (jentry % 1000 == 0) std::cout << "Processed " << jentry << " entries" << std::endl;
+    if (jentry % 100 == 0) std::cout << "Processed " << jentry << " entries" << std::endl;
     nb = tree1->GetEntry(jentry);   nbytes += nb;
     bonsaiTree.Reset();
     inputparticles_tru.clear();
@@ -285,7 +304,8 @@ int main(int argc, char **argv) {
       fastjet::ClusterSequence clust_seq_cher(inputparticles_cher, jet_defs);
       */
 
-      fastjet::JetDefinition jet_defs(fastjet::ee_genkt_algorithm, 0.1, 1.);
+
+      fastjet::JetDefinition jet_defs(fastjet::ee_genkt_algorithm, 2.*pi, 1.);
       fastjet::ClusterSequence clust_seq_scin(inputparticles_scin, jet_defs); 
       fastjet::ClusterSequence clust_seq_cher(inputparticles_cher, jet_defs);
       
@@ -296,14 +316,15 @@ int main(int argc, char **argv) {
       jet_rec.clear();
       jet_recem.clear();
       jet_tru.clear();
+      jet_truem.clear();
       //  create vector of jet_scin
-      jet_scin = clust_seq_scin.inclusive_jets();;
+      jet_scin = clust_seq_scin.exclusive_jets(int(2));;
       
       
       //   create temp vector of jet_cher 
-      jet_cher_t = clust_seq_cher.inclusive_jets();;
+      jet_cher_t = clust_seq_cher.exclusive_jets(int(2));;
       
-      std::cout << "New event" << std::endl;
+      /*      std::cout << "New event" << std::endl;
       std::cout << "NJets scint " << jet_scin.size() << std::endl;
       for (unsigned int i = 0; i < jet_scin.size(); ++i){
 	std::cout << "jet_scin " << i << " Pt, Eta, Phi " << jet_scin[i].pt() << "   " << jet_scin[i].eta() << "   " << jet_scin[i].phi() << std::endl;
@@ -311,24 +332,35 @@ int main(int argc, char **argv) {
       std::cout << "NJets cher " << jet_cher_t.size() << std::endl;
       for (unsigned int i = 0; i < jet_cher_t.size(); ++i){
 	std::cout << "jet_cher_t " << i << " Pt, Eta, Phi " << jet_cher_t[i].pt() << "   " << jet_cher_t[i].eta() << "   " << jet_cher_t[i].phi() << std::endl;
-      }
+	}*/
+
       
       //   align jet_cher and jet_scin vector
       for(uint jn=0; jn<jet_scin.size();jn++) {
         jet_cher.push_back(matchjet(jet_scin[jn], jet_cher_t)); 
       }
-      //   combine aligned scin and cher into rec
-      for(uint jn=0; jn<jet_scin.size();jn++) {
-        jet_rec.push_back(mergejet(jet_scin[jn],jet_cher[jn]));
+
+      // Recalibrate the jets if requested
+
+      if (doRecal){
+	recalibrate(&jet_scin,h_calib_scint);
+	recalibrate(&jet_cher,h_calib_cher);
       }
 
       //   combine aligned scin and cher into recem
       for(uint jn=0; jn<jet_scin.size();jn++) {
         jet_recem.push_back(mergejetem(jet_scin[jn],jet_cher[jn],doRecal));
       }
+
+      for(uint jn=0; jn<jet_recem.size();jn++) {
+        jet_truem.push_back(matchjet(jet_recem[jn], jetexc)); 
+      }
+
+      //   combine aligned scin and cher into rec
+      for(uint jn=0; jn<jet_scin.size();jn++) {
+        jet_rec.push_back(mergejet(jet_scin[jn],jet_cher[jn]));
+      }
       
-      //   align truth jet with rec jets
-      //
       for(uint jn=0; jn<jet_rec.size();jn++) {
         jet_tru.push_back(matchjet(jet_rec[jn], jetexc)); 
       }
@@ -389,7 +421,10 @@ int main(int argc, char **argv) {
 	jethybDirRec = makeHybrid(jet_tru[0],jet_recem[0]) + makeHybrid(jet_tru[1],jet_recem[1]);
       }
 
-      
+      double eshare_scin0 = energyShare(jet_scin[0]);      
+      double eshare_scin1 = energyShare(jet_scin[1]);      
+      double eshare_cher0 = energyShare(jet_cher[0]);      
+      double eshare_cher1 = energyShare(jet_cher[1]);      
 
 
       bonsaiTree.nmuon = ngam;
@@ -487,6 +522,10 @@ int main(int argc, char **argv) {
       bonsaiTree.j2c_phi=(jet_cher.size() > 1) ? jet_cher[1].phi() : -10000;
       bonsaiTree.j2c_m=(jet_cher.size() > 1) ? jet_cher[1].m() : -10000;
       bonsaiTree.j2c_theta=(jet_cher.size() > 1) ? jet_cher[1].theta() : -10000;
+      bonsaiTree.j1s_eshare = eshare_scin0;
+      bonsaiTree.j2s_eshare = eshare_scin1;
+      bonsaiTree.j1c_eshare = eshare_cher0;
+      bonsaiTree.j2c_eshare = eshare_cher1;
       //      bonsaiTree.closestT_DR_gam1 = (jet_tru.size() > 0) ?  jet_tru[0].delta_R(findClosestTower(jet_tru[0])) : -10000;
       //      bonsaiTree.closestT_DR_gam2 = (jet_tru.size() > 1) ?  jet_tru[1].delta_R(findClosestTower(jet_tru[1])) : -10000;
       bonsaiTree.closestT_DR_gam1 = 0;
@@ -508,59 +547,11 @@ int main(int argc, char **argv) {
   delete f1;
 
 }
-std::vector<double> calibscin(std::vector<double> vectorscin){
-	std::vector<double> s_cont;
-	s_cont = {391.9964784225476, 392.65450934717455, 391.9130470386118, 390.6050630558208, 389.1126112802391, 387.95945028322916, 387.4823598282578, 388.1313680310084, 389.1887061971629, 389.39650703390834, 388.1539715075822, 388.50402528038387, 388.8469797524201, 389.5104813700643, 389.9263913577828, 389.03950145952115, 388.99508641977286, 388.772944352741, 389.1309191354679, 389.2350876534651, 389.13791528990845, 388.8450419930907, 389.1250633143002, 388.9702856267768, 388.89437597892635, 389.54155385650677, 389.6077230144546, 389.83471955121126, 388.9057586548166, 388.64729869880443, 389.63139958072384, 390.1488269998545, 388.91138544610874, 389.57905936367644, 389.4504769524226, 389.22625067001826, 389.79318503855836, 389.6127033215785, 389.1037017285112, 389.73580729121386, 389.31584083722316, 389.40881680859326, 389.323138549745, 389.2451419219243, 389.3922639055792, 388.796221854985, 388.97157341770327, 388.99869472269773, 389.07910256875385, 389.31098859776864, 388.7419881503485, 388.3143923895009, 389.0092636036939, 388.229773876986, 388.3854174264933, 388.05911875263905, 387.2643574001875, 387.3554637363693, 387.39402352923776, 387.02865949856425, 386.9609406993706, 386.7226638865326, 386.7789454376136, 386.7732373979207, 385.4992193760886, 385.5215522567318, 384.82993023752476, 384.24706703575663, 384.2926857786712, 383.6152585260428, 382.8533589897697, 384.67220539781823, 383.42475883749, 382.5620400263505, 376.3078422852331};
-	
-	int loop1 = s_cont.size();
-	int loop2 = 36;
 
-	for(int b=1; b<loop2; b++){
-		for(int i=0; i<loop1; i++){
-			s_cont.push_back(s_cont[i]);
-		}
-	}
 
-	double c = 0.1;
-	s_cont.insert(s_cont.begin(),c);
 
-	if(s_cont.size() != vectorscin.size()){cout<<"ERROR in calibration!"<<endl;}
 
-	std::vector<double> Calib_vectorScin;
 
-	for(uint i=0; i<vectorscin.size(); i++){
-		Calib_vectorScin.push_back(vectorscin[i]*(1.0/s_cont[i]));
-	}
-
-	return Calib_vectorScin;
-}
-
-std::vector<double> calibcher(std::vector<double> vectorcher){
-	std::vector<double> c_cont;
-	c_cont = {99.869475119436, 99.5892930698953, 99.36819945465197, 99.32851833492266, 99.23212488346117, 99.21702593539936, 99.03028402205433, 99.15912908522857, 99.2060316999247, 99.30522580785956, 99.11344505994408, 99.21283817184117, 99.25155522412936, 99.29526075724375, 99.32726514547564, 99.21535433745935, 99.24785175107958, 99.2500389422396, 99.2947777840262, 99.20923521702923, 99.30797870907622, 99.31656510767378, 99.21947678681387, 99.32713686590662, 99.32851884709454, 99.305911407397, 99.30508949248147, 99.34913871640343, 99.19261358390726, 99.16893956672706, 99.26948077177317, 99.31331547462389, 99.30086159029355, 99.37873056276479, 99.35080907470335, 99.42847084872328, 99.40510235111934, 99.30670688191663, 99.38448289299362, 99.43075203396795, 99.34555944179634, 99.38032213687576, 99.3653611014606, 99.33974923759105, 99.36938995243544, 99.41133031804752, 99.33192563010871, 99.18049429253469, 99.39705625808192, 99.24849638998961, 99.2286007870197, 99.09928229987484, 99.0993256503711, 99.19364178823666, 99.0555902591915, 99.0621809829577, 98.97675936409205, 99.13401462382535, 99.03520349760886, 99.01410173081639, 98.805439062685, 98.8931348280415, 98.84927421673683, 98.71812808136468, 98.76605765544863, 98.8150716743538, 98.664618195543, 98.52979814367153, 98.39802169218106, 98.48346797819356, 98.46914717338315, 98.21105203135059, 98.38198816987828, 98.04422762750505, 96.54297571859878};
-
-	int loop1 = c_cont.size();
-	int loop2 = 36;
-
-	for(int b=1; b<loop2; b++){
-		for(int i=0; i<loop1; i++){
-			c_cont.push_back(c_cont[i]);
-		}
-	}
-
-	double c = 0.1;
-	c_cont.insert(c_cont.begin(),c);
-
-	if(c_cont.size() != vectorcher.size()){cout<<"ERROR in calibration!"<<endl;}
-
-	std::vector<double> Calib_vectorCher;
-
-	for(uint i=0; i<vectorcher.size(); i++){
-		Calib_vectorCher.push_back(vectorcher[i]*(1.0/c_cont[i]));
-	}
-
-	return Calib_vectorCher;
-}
 //
 std::tuple<double, double, double> maptower(int index, std::string side){
 //Function to return tower angles (theta and phi) given index
@@ -605,8 +596,8 @@ fastjet::PseudoJet mergejetem(fastjet::PseudoJet jet_scin, fastjet::PseudoJet je
   double scinConst = 1.;
 
   if (doCalib){
-    cherConst = 1/1.06;
-    scinConst = 1/1.039;
+    cherConst = 1;
+    scinConst = 1;
   }
   
   double jetPx = (scinConst*jet_scin.px()+ cherConst*jet_cher.px())/2.;
@@ -679,3 +670,155 @@ fastjet::PseudoJet findClosestTower(fastjet::PseudoJet v)
   return retval;
 }
 
+double energyShare(fastjet::PseudoJet jet)
+{
+  double retval = -1.;
+
+  std::vector<fastjet::PseudoJet> j_const = jet.constituents();
+  std::vector<double> energies;
+  energies.reserve(j_const.size());
+  for (auto i : j_const){
+    energies.push_back(i.E());
+  }
+
+  std::sort(energies.begin(),energies.end(),std::greater<double>());
+  
+  if (energies.size() < 2) retval = 0.;
+  else retval = energies[1]/energies[0];
+
+  return retval;
+}
+
+/************************ original calibration constants ************
+
+std::vector<double> calibscin(std::vector<double> vectorscin){
+	std::vector<double> s_cont;
+	s_cont = {391.9964784225476, 392.65450934717455, 391.9130470386118, 390.6050630558208, 389.1126112802391, 387.95945028322916, 387.4823598282578, 388.1313680310084, 389.1887061971629, 389.39650703390834, 388.1539715075822, 388.50402528038387, 388.8469797524201, 389.5104813700643, 389.9263913577828, 389.03950145952115, 388.99508641977286, 388.772944352741, 389.1309191354679, 389.2350876534651, 389.13791528990845, 388.8450419930907, 389.1250633143002, 388.9702856267768, 388.89437597892635, 389.54155385650677, 389.6077230144546, 389.83471955121126, 388.9057586548166, 388.64729869880443, 389.63139958072384, 390.1488269998545, 388.91138544610874, 389.57905936367644, 389.4504769524226, 389.22625067001826, 389.79318503855836, 389.6127033215785, 389.1037017285112, 389.73580729121386, 389.31584083722316, 389.40881680859326, 389.323138549745, 389.2451419219243, 389.3922639055792, 388.796221854985, 388.97157341770327, 388.99869472269773, 389.07910256875385, 389.31098859776864, 388.7419881503485, 388.3143923895009, 389.0092636036939, 388.229773876986, 388.3854174264933, 388.05911875263905, 387.2643574001875, 387.3554637363693, 387.39402352923776, 387.02865949856425, 386.9609406993706, 386.7226638865326, 386.7789454376136, 386.7732373979207, 385.4992193760886, 385.5215522567318, 384.82993023752476, 384.24706703575663, 384.2926857786712, 383.6152585260428, 382.8533589897697, 384.67220539781823, 383.42475883749, 382.5620400263505, 376.3078422852331};
+	
+	int loop1 = s_cont.size();
+	int loop2 = 36;
+
+	for(int b=1; b<loop2; b++){
+		for(int i=0; i<loop1; i++){
+			s_cont.push_back(s_cont[i]);
+		}
+	}
+
+	double c = 0.1;
+	s_cont.insert(s_cont.begin(),c);
+
+	if(s_cont.size() != vectorscin.size()){cout<<"ERROR in calibration!"<<endl;}
+
+	std::vector<double> Calib_vectorScin;
+
+	for(uint i=0; i<vectorscin.size(); i++){
+		Calib_vectorScin.push_back(vectorscin[i]*(1.0/s_cont[i]));
+	}
+
+	return Calib_vectorScin;
+}
+
+std::vector<double> calibcher(std::vector<double> vectorcher){
+	std::vector<double> c_cont;
+	c_cont = {99.869475119436, 99.5892930698953, 99.36819945465197, 99.32851833492266, 99.23212488346117, 99.21702593539936, 99.03028402205433, 99.15912908522857, 99.2060316999247, 99.30522580785956, 99.11344505994408, 99.21283817184117, 99.25155522412936, 99.29526075724375, 99.32726514547564, 99.21535433745935, 99.24785175107958, 99.2500389422396, 99.2947777840262, 99.20923521702923, 99.30797870907622, 99.31656510767378, 99.21947678681387, 99.32713686590662, 99.32851884709454, 99.305911407397, 99.30508949248147, 99.34913871640343, 99.19261358390726, 99.16893956672706, 99.26948077177317, 99.31331547462389, 99.30086159029355, 99.37873056276479, 99.35080907470335, 99.42847084872328, 99.40510235111934, 99.30670688191663, 99.38448289299362, 99.43075203396795, 99.34555944179634, 99.38032213687576, 99.3653611014606, 99.33974923759105, 99.36938995243544, 99.41133031804752, 99.33192563010871, 99.18049429253469, 99.39705625808192, 99.24849638998961, 99.2286007870197, 99.09928229987484, 99.0993256503711, 99.19364178823666, 99.0555902591915, 99.0621809829577, 98.97675936409205, 99.13401462382535, 99.03520349760886, 99.01410173081639, 98.805439062685, 98.8931348280415, 98.84927421673683, 98.71812808136468, 98.76605765544863, 98.8150716743538, 98.664618195543, 98.52979814367153, 98.39802169218106, 98.48346797819356, 98.46914717338315, 98.21105203135059, 98.38198816987828, 98.04422762750505, 96.54297571859878};
+
+	int loop1 = c_cont.size();
+	int loop2 = 36;
+
+	for(int b=1; b<loop2; b++){
+		for(int i=0; i<loop1; i++){
+			c_cont.push_back(c_cont[i]);
+		}
+	}
+
+	double c = 0.1;
+	c_cont.insert(c_cont.begin(),c);
+
+	if(c_cont.size() != vectorcher.size()){cout<<"ERROR in calibration!"<<endl;}
+
+	std::vector<double> Calib_vectorCher;
+
+	for(uint i=0; i<vectorcher.size(); i++){
+		Calib_vectorCher.push_back(vectorcher[i]*(1.0/c_cont[i]));
+	}
+
+	return Calib_vectorCher;
+}
+
+************************** new calibration constants *********************/
+
+
+
+std::vector<double> calibscin(std::vector<double> vectorscin){
+	std::vector<double> s_cont;
+	s_cont = {408.21638950554075, 408.3954472740771, 407.1870232421094, 406.63875945884087, 404.8060585388971, 403.97304819147996, 403.3691105878475, 403.49367909804056, 404.55647780600043, 405.58591491094637, 403.9575182245898, 404.4757730162475, 404.72249522199195, 405.272159576985, 404.74332809708255, 404.83205898107536, 405.23195412471205, 404.9766105533868, 404.9085068798063, 404.9314555180952, 404.67532710488985, 404.58364980855805, 405.012793566413, 405.0007315500301, 404.30902206187204, 405.6974274788762, 405.2261341502687, 405.63975175649347, 404.90683641527, 404.37034541526305, 405.67260217215875, 405.5109490861691, 404.2898135363692, 405.07073526391474, 405.58981257625425, 405.3751447994642, 405.36549518339785, 405.3332161707569, 404.88956759976287, 405.37027184803094, 404.8980725551248, 405.34774082392767, 405.2984093045488, 405.14372480308344, 405.19187487160525, 405.03757034167137, 405.16280927227615, 404.7829216539207, 405.03107640207867, 404.7292557576276, 404.8025372723253, 403.9177916263665, 404.7460239584375, 403.96821450150077, 404.1905949169899, 404.1704924951662, 403.16496315846314, 402.2360298379118, 403.3863719919289, 402.9762332238292, 403.15699339382735, 403.4020052256797, 402.3032561236677, 402.8453577277423, 401.11356268338346, 401.3504783424065, 400.94087925309395, 400.29569405733, 400.0328154316862, 399.5130445431503, 398.66148407548866, 399.83880015591535, 398.96289406538807, 398.42261837089694, 391.76612693948175};
+
+	
+	int loop1 = s_cont.size();
+	int loop2 = 36;
+
+	for(int b=1; b<loop2; b++){
+		for(int i=0; i<loop1; i++){
+			s_cont.push_back(s_cont[i]);
+		}
+	}
+
+	double c = 0.1;
+	s_cont.insert(s_cont.begin(),c);
+
+	if(s_cont.size() != vectorscin.size()){cout<<"ERROR in calibration!"<<endl;}
+
+	std::vector<double> Calib_vectorScin;
+
+	for(uint i=0; i<vectorscin.size(); i++){
+		Calib_vectorScin.push_back(vectorscin[i]*(1.0/s_cont[i]));
+	}
+
+	return Calib_vectorScin;
+}
+
+std::vector<double> calibcher(std::vector<double> vectorcher){
+	std::vector<double> c_cont;
+	c_cont = {103.08779161895677, 102.91302749597065, 102.69865952763615, 102.61869191270468, 102.54928716539662, 102.48068194031679, 102.49984890080964, 102.35556540203991, 102.47969263317724, 102.6281510005559, 102.43322742473204, 102.47810836409134, 102.55371034296142, 102.67118096060427, 102.67297232291142, 102.48284061965019, 102.5649981010228, 102.56155933915096, 102.67809243921879, 102.56067521092992, 102.60224889784466, 102.63726587197354, 102.63191774143888, 102.76496337880408, 102.6929637252195, 102.60491403169074, 102.85913301772406, 102.741217657914, 102.69546934772463, 102.67035622618218, 102.69304228926421, 102.75886941001674, 102.75976221892324, 102.731492956408, 102.7188845221274, 102.77429845330465, 102.78649420797491, 102.75140309520445, 102.70051794706535, 102.68996042906552, 102.78365100098196, 102.8153738834064, 102.71292597825087, 102.73146416207084, 102.6450394621172, 102.61404003462839, 102.66675609739092, 102.60991640602225, 102.750246685674, 102.62575682868824, 102.42720794074478, 102.51305416968992, 102.52098979376447, 102.59751750679058, 102.45780037787654, 102.53083482963227, 102.47068539942974, 102.5721049950492, 102.56599170316093, 102.46469174495641, 102.19238017547394, 102.28148980648412, 102.19817435184497, 102.1330715125064, 102.09230341456059, 102.05765775486448, 101.9644426420847, 101.96014956820567, 101.85273676485993, 101.93311307596035, 101.96637882465569, 101.68716060542853, 101.55050000833062, 101.67603040894112, 99.77195006099979};
+
+	int loop1 = c_cont.size();
+	int loop2 = 36;
+
+	for(int b=1; b<loop2; b++){
+		for(int i=0; i<loop1; i++){
+			c_cont.push_back(c_cont[i]);
+		}
+	}
+
+	double c = 0.1;
+	c_cont.insert(c_cont.begin(),c);
+
+	if(c_cont.size() != vectorcher.size()){cout<<"ERROR in calibration!"<<endl;}
+
+	std::vector<double> Calib_vectorCher;
+
+	for(uint i=0; i<vectorcher.size(); i++){
+		Calib_vectorCher.push_back(vectorcher[i]*(1.0/c_cont[i]));
+	}
+
+	return Calib_vectorCher;
+}
+
+
+void recalibrate(std::vector<fastjet::PseudoJet> * jet, TProfile * h_cal)
+{
+
+  for (unsigned int i = 0; i < jet->size(); ++i){
+    double eshare = energyShare(jet->at(i));
+    double calConst = h_cal->GetBinContent(h_cal->FindBin(eshare));
+    if (calConst != 0) calConst = 1./calConst;
+    else calConst = 1;
+    jet->at(i).reset_momentum(calConst * jet->at(i).px(),
+			      calConst * jet->at(i).py(),
+			      calConst * jet->at(i).pz(),
+			      calConst * jet->at(i).E());
+			      
+  }
+
+}  
+/*********************************************************/
