@@ -7,6 +7,7 @@ Athena with SUSYtup. See SUSYtup.h for more information.
 
 #include <TROOT.h> 
 #include "TTree.h" 
+#include "TChain.h" 
 #include "TBranch.h" 
 #include "TProfile.h"
 #include <TFile.h>
@@ -93,6 +94,7 @@ int main(int argc, char **argv) {
   TProfile * h_calib_scint = 0;
   TProfile * h_calib_cher = 0;
   TFile * fCal = 0;
+
   if (doRecal){
     fCal = TFile::Open("calfile_DR_hgamgam.root");
     if (!fCal){
@@ -118,12 +120,8 @@ int main(int argc, char **argv) {
   
   // Making the assumption on the name of the output file. Maybe the two trees should at some point be written in the same output file? 
   
-  std::string filetru = fn+"_truth.root";
-  std::string filesim = fn+".root";
-  std::cout<< "Reading file " <<filetru <<std::endl;
-  TFile* f = new TFile( filetru.c_str() );
-  std::cout<< "Reading file " <<filesim <<std::endl;
-  TFile* f1 = new TFile( filesim.c_str() );
+
+
   
   int pos_st=histName.rfind("/");
   string stma=histName.substr(pos_st+1);
@@ -132,28 +130,29 @@ int main(int argc, char **argv) {
   ftree = new TFile(newfile.c_str(), "RECREATE");
   bonsaiTree.Init();
   
-#include "truthdec.h"
-#include "B4dec.h"
+#include "newtree.h"
   
+  std::string filesim = fn+"*.root";
+  TChain * tree2 = new TChain("B4merge");
+  std::cout << "Add file pattern " << filesim << " to the reco chain" << std::endl;
+  tree2->Add(filesim.c_str());
+
+#include "newtreeset.h"
+
+  tree2->GetEntry(0);
   //
-  TTree* tree1 = (TTree*)f->Get("truth");
-  TTree* tree2 = (TTree*)f1->Get("B4");
-  tree1->AddFriend(tree2);
-#include "truthset.h"
-#include "B4set.h"
-  tree1->GetEntry(0);
-  //
   
   
-  if (tree1== 0) return 1;
-  Int_t nentries = Int_t(tree1->GetEntries());
+  if (tree2== 0) return 1;
+  Int_t nentries = Int_t(tree2->GetEntries());
   Int_t nbytes= 0, nb = 0;
   // Loop on the number of events
   
   cout << " Number of events " << nentries << endl;
-  for (Int_t jentry=0; jentry<nentries;jentry++) {
-    if (jentry % 100 == 0) std::cout << "Processed " << jentry << " entries" << std::endl;
-    nb = tree1->GetEntry(jentry);   nbytes += nb;
+  //  for (Int_t jentry=0; jentry<nentries;jentry++) {
+  for (Int_t jentry=0; jentry<100000;jentry++) {
+    if (jentry % 1000 == 0) std::cout << "Processed " << jentry << " entries" << std::endl;
+    nb = tree2->GetEntry(jentry);   nbytes += nb;
     bonsaiTree.Reset();
     inputparticles_tru.clear();
     gamvec.clear();
@@ -171,12 +170,14 @@ int main(int argc, char **argv) {
     // Check how many events we have at different stages of teh selection
     
     ++cutflow[0];
-    
+
+    //    std::cout << "Looping over truth" << std::endl;
+    //std::cout << mcs_n << std::endl;    
     for(uint itru=0;itru<mcs_n;itru++){
       int partid = mcs_pdgId->at(itru);
       double parteta = mcs_eta->at(itru);
       etott+=mcs_E->at(itru);
-      
+
       // Prepare them to be clustered by fastjet if they are not neutrinos or neutralinos, or muons
       
       if(abs(partid) != 13 &&  
@@ -198,7 +199,7 @@ int main(int argc, char **argv) {
         nuvec.push_back(nu_p);
 	nneu++;
       }
-      
+
       if(abs(partid) == 22){
         TLorentzVector gam;
         gam.SetPtEtaPhiM(mcs_pt->at(itru), mcs_eta->at(itru), mcs_phi->at(itru),
@@ -209,13 +210,15 @@ int main(int argc, char **argv) {
     } // loop on truth particles    
     //    cout << etott << endl;
     jetexc.clear();
-    
+    //    std::cout << mcs_n << std::endl;
     if (mcs_n != 4) continue; 
     ++cutflow[1];
-
+    //    std::cout << "ngam " << ngam << std::endl;
     if (ngam != 2) continue;
     ++cutflow[2];
     
+    //std::cout << "Truth done" << std::endl;
+
     // Define what jet should be reconstructed
     
     fastjet::JetDefinition jet_def(fastjet::ee_genkt_algorithm, 2.*pi, 1.);
@@ -235,6 +238,8 @@ int main(int argc, char **argv) {
     if (jetexc[0].delta_R(jetexc[1]) < 1) continue;
     ++cutflow[3];
     
+    //std::cout << "Now starting reco" << std::endl;
+
     //  now the rec part
     //
     Calib_VectorScinR.clear();
@@ -303,7 +308,8 @@ int main(int argc, char **argv) {
       fastjet::ClusterSequence clust_seq_scin(inputparticles_scin, jet_defs); 
       fastjet::ClusterSequence clust_seq_cher(inputparticles_cher, jet_defs);
       */
-
+      //      std::cout << "inputparticles_scin " << inputparticles_scin.size() << std::endl;
+      //      std::cout << "inputparticles_cher " << inputparticles_cher.size() << std::endl;
 
       fastjet::JetDefinition jet_defs(fastjet::ee_genkt_algorithm, 2.*pi, 1.);
       fastjet::ClusterSequence clust_seq_scin(inputparticles_scin, jet_defs); 
@@ -318,6 +324,11 @@ int main(int argc, char **argv) {
       jet_tru.clear();
       jet_truem.clear();
       //  create vector of jet_scin
+
+      if (inputparticles_scin.size() < 2) continue;
+      if (inputparticles_cher.size() < 2) continue;
+      ++cutflow[4];
+
       jet_scin = clust_seq_scin.exclusive_jets(int(2));;
       
       
@@ -366,15 +377,15 @@ int main(int argc, char **argv) {
       }
       
       if (jet_scin.size() != 2) continue;
-      ++cutflow[4];
-      if (jet_cher.size() != 2) continue;
       ++cutflow[5];
-      if (jet_rec.size() != 2) continue;
+      if (jet_cher.size() != 2) continue;
       ++cutflow[6];
-      if (jet_recem.size() != 2) continue;
+      if (jet_rec.size() != 2) continue;
       ++cutflow[7];
-      if (jet_recem[0].E() < 10 || jet_recem[1].E() < 10 || jet_tru[0].E() < 10 || jet_tru[1].E() < 10) continue;
+      if (jet_recem.size() != 2) continue;
       ++cutflow[8];
+      if (jet_recem[0].E() < 10 || jet_recem[1].E() < 10 || jet_tru[0].E() < 10 || jet_tru[1].E() < 10) continue;
+      ++cutflow[9];
     
 
       //
@@ -543,9 +554,9 @@ int main(int argc, char **argv) {
 
   ftree->cd();
   bonsaiTree.Write();
-  delete f;
+  /*  delete f;
   delete f1;
-
+  */
 }
 
 
